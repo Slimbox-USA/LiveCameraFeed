@@ -6,24 +6,20 @@ import time
 import psutil
 import subprocess
 import threading
-import RPi.GPIO as GPIO
+# import RPi.GPIO as GPIO
 
-GPIO.setmode(GPIO.BCM)
-GPIO.setwarnings(False)
+# GPIO.setmode(GPIO.BCM)
+# GPIO.setwarnings(False)
 
-FAN_PIN = 14
-GPIO.setup(FAN_PIN, GPIO.OUT)
-GPIO.output(FAN_PIN, GPIO.HIGH)  # Turn pin ON (3.3V)
+# FAN_PIN = 14
+# GPIO.setup(FAN_PIN, GPIO.OUT)
+# GPIO.output(FAN_PIN, GPIO.HIGH)  # Turn pin ON (3.3V)
 
-# ESP device config
-esp_IP = "192.168.192.152"
-esp_port = 80
-
-
-onTemp = 60
+# onTemp = 50
 connected_ips = set()
 
-# Threading lock for shared data
+
+
 lock = threading.Lock()
 latest_frame = None
 
@@ -31,13 +27,11 @@ latest_frame = None
 drop_flag = False
 automatic_start = True
 automatic_stop = False
-boxCount = 0
+
 
 app = Flask(__name__)
 CORS(app)
 
-
-  
 
 # 🔍 Automatically find the first working camera
 def find_camera_index(max_index=10):
@@ -110,28 +104,29 @@ def get_views():
     return len(connected_ips)
 
 
+
 # 📡 Video feed route
 @app.route('/video_feed')
 def video_feed():
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
-# Send drop command to ESP
-def send_drop(drop_flag):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((esp_IP, esp_port))
-        s.sendall(b'drop\n' if drop_flag else b'0')
+# # Send drop command to ESP -- Can change for PLC.
+# def send_drop(drop_flag):
+#     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#         s.connect((esp_IP, esp_port))
+#         s.sendall(b'drop\n' if drop_flag else b'0')
 
-# Send stop automatic command to ESP
-def stop_automatic(automatic_stop):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((esp_IP, esp_port))
-        s.sendall(b'stop\n' if automatic_stop else b'3')
+# # Send stop automatic command to ESP
+# def stop_automatic(automatic_stop):
+#     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#         s.connect((esp_IP, esp_port))
+#         s.sendall(b'stop\n' if automatic_stop else b'3')
 
-# Send start automatic command to ESP
-def start_automatic(automatic_start):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((esp_IP, esp_port))
-        s.sendall(b'start\n' if automatic_start else b'3')
+# # Send start automatic command to ESP
+# def start_automatic(automatic_start):
+#     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#         s.connect((esp_IP, esp_port))
+#         s.sendall(b'auto\n' if automatic_start else b'3')
 
 def get_cpu_temp():
     output = subprocess.check_output(['vcgencmd', 'measure_temp']).decode()
@@ -141,45 +136,50 @@ def get_cpu_temp():
 def gather_data():
     cpu_percent = psutil.cpu_percent(interval=None, percpu=False)
     cpu_temp = get_cpu_temp()
-    views = get_views()
     return jsonify({
         "cpuPercent": cpu_percent,
-        "temp": cpu_temp,
-        "view": views
+        "temp": cpu_temp
     })
 
-# Drop table endpoint
-@app.route('/dropTable', methods=['POST'])
-def drop_table():
-    global drop_flag
-    with lock:
-        drop_flag = True
-        send_drop(drop_flag)
-        print("Button Pressed: Dropping Table")
-    threading.Thread(target=reset_status).start()
-    return jsonify({"drop_status": True})
+@app.route('/ViewerCount')
+def gather_views():
+    view = get_views()
+    return jsonify({
+        "viewCount" : view
+    })
+
+# # Drop table endpoint
+# @app.route('/dropTable', methods=['POST'])
+# def drop_table():
+#     global drop_flag
+#     with lock:
+#         drop_flag = True
+#         send_drop(drop_flag)
+#         print("Button Pressed: Dropping Table")
+#     threading.Thread(target=reset_status).start()
+#     return jsonify({"drop": True})
 
 # Stop automatic endpoint
-@app.route('/stopAutomatic', methods=['POST'])
-def stop_automatic_route():
-    global automatic_stop
-    with lock:
-        automatic_stop = True
-        stop_automatic(automatic_stop)
-        print("Button pressed: stopAutomatic set to True")
-    threading.Thread(target=reset_status).start()
-    return jsonify({"message": "Button pressed", "status": True})
+# @app.route('/stopAutomatic', methods=['POST'])
+# def stop_automatic_route():
+#     global automatic_stop
+#     with lock:
+#         automatic_stop = True
+#         stop_automatic(automatic_stop)
+#         print("Button pressed: stopAutomatic set to True")
+#     threading.Thread(target=reset_status).start()
+#     return jsonify({"stop": True})
 
-# Start automatic endpoint
-@app.route('/startAutomatic', methods=['POST'])
-def start_automatic_route():
-    global automatic_start
-    with lock:
-        automatic_start = True
-        start_automatic(automatic_start)
-        print("Button pressed: startAutomatic set to True")
-    threading.Thread(target=reset_status).start()
-    return jsonify({"message": "Button pressed", "status": True})
+# # Start automatic endpoint
+# @app.route('/startAutomatic', methods=['POST'])
+# def start_automatic_route():
+#     global automatic_start
+#     with lock:
+#         automatic_start = True
+#         start_automatic(automatic_start)
+#         print("Button pressed: startAutomatic set to True")
+#     threading.Thread(target=reset_status).start()
+#     return jsonify({"message": "Button pressed", "status": True})
 
 # 🚀 Start the Flask server
 if __name__ == '__main__':

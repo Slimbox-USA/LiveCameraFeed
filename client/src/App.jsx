@@ -2,11 +2,12 @@ import React, { useEffect, useState, } from 'react';
 import {
   AppBar, Toolbar, Container, Stack, Box, Typography,
   Paper, Chip, Grid,
-  Button, ButtonGroup, Divider
+  Button, ButtonGroup, Divider, TextField,List, ListItem, ListItemText,  ListItemSecondaryAction, IconButton, Modal,
+  
 } from '@mui/material';
 import {ThemeProvider, createTheme,useTheme} from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import { Person } from '@mui/icons-material';
+import { Person, AddBox, Delete,Speed } from '@mui/icons-material';
 import { Gauge, gaugeClasses } from '@mui/x-charts';
 import axios from "axios";
 import './App.css';
@@ -14,8 +15,9 @@ import './App.css';
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#31b14fbd',
-      second: '#eaeaeaff',
+      main: '#d6d6d6ff',
+      borderColor: '#31b14fbd',
+      second: '#d6d6d6ff',
       third: '#0fe04a74',
     },
   },
@@ -26,27 +28,58 @@ function App() {
   const [temp, setTemp] = useState([]);
   const [cpuData, setcpuData] = useState([]);
   const [viewCount, setviewCount] = useState([]);
+  const [quickNotes, setQuickNotes] = useState([]);
+  const [newQuickNote, setNewQuickNote] = useState([]);
+  const [openInfo, setOpenInfo] = useState(false);
+
+
 
   const theme2 = useTheme();
   const isSmallScreen = useMediaQuery(theme2.breakpoints.down('sm'));
 
   useEffect(() => {
+    //Only fetch raspberry pi data if user selects.
+    if (!openInfo) return; 
+
+    let intervalId;
+    // fetchData funciton.
     const fetchData = async () => {
       try {
-        const response = await axios.get('http://192.168.192.107:5000/AllData');
+        const response = await axios.get("http://192.168.192.147:5000/AllData");
         const data = response.data;
         setcpuData(data.cpuPercent);
         setTemp(data.temp);
-        setviewCount(data.view);
       } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error("Error fetching data:", error);
+      }
+    };
+  
+
+    fetchData(); // fetch immediately when modal opens
+    intervalId = setInterval(fetchData, 500); // then fetch repeatedly
+
+    return () => {
+      clearInterval(intervalId); // cleanup when modal closes or component unmounts
+    };
+  }, [openInfo]); // triggers whenever openInfo changes
+  // fetchViewer gathers viewer count every 5 seconds. 
+  useEffect(() => {
+     const fetchViewer = async () => {
+      try{
+        const response = await axios.get("http://192.168.192.147:5000/ViewerCount")
+        const data = response.data;
+        setviewCount(data.viewCount);
+      } catch (error) {
+        console.error("Error fetching viewer count:", error);
       }
     };
 
-    fetchData();
-    const interval = setInterval(fetchData, 500);
-    return () => clearInterval(interval);
-  }, []);
+    fetchViewer();
+    const interval = setInterval(fetchViewer, 5000); //fetchViewer request time 
+    return () => { clearInterval(interval);
+    };
+  },[]);
+
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -55,9 +88,19 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
+  const addQuickNote = () => {
+    if (newQuickNote.trim()) {
+      setQuickNotes([
+        ...quickNotes,
+        { id: Date.now(), text: newQuickNote, date: new Date() },
+      ]);
+      setNewQuickNote("");
+    }
+  };
+
   return (
     <ThemeProvider theme={theme}>
-      <AppBar position="static"  sx={{ borderRadius: 5, p: 1 }}>
+      <AppBar position="static"  sx={{ border: 5, borderColor: 'primary.main',backgroundColor: 'primary.borderColor',borderRadius: 5, p: 1 }}>
         <Toolbar sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: { xs: 1, sm: 0 } }}>
             <Box
@@ -75,18 +118,12 @@ function App() {
             </Typography>
           </Box>
 
-          {/* ✅ Responsive Divider */}
+          {/* ✅ Responsive Divider
           <Divider
             orientation={isSmallScreen ? 'horizontal' : 'vertical'}
             flexItem
             sx={{ mx: isSmallScreen ? 5: 10, my: isSmallScreen ? 5 : 0 }}
-          />
-
-          <ButtonGroup variant="contained" color="primary.main" disableElevation >
-            <Button onClick={() => axios.post("http://192.168.168.192:5000/stopAutomatic")}>Stop Automatic</Button>
-            <Button onClick={() => axios.post("http://192.168.192.107:5000/dropTable")}>Manual Drop</Button>
-            <Button onClick={() => axios.post("http://192.168.192.107:5000/startAutomatic")}>Start Automatic</Button>
-          </ButtonGroup>
+          /> */}
         </Toolbar>
     </AppBar>
 
@@ -95,118 +132,123 @@ function App() {
       <Container sx={{ pt: 4, pb: 4 }}>
         <Grid container spacing={4} alignItems="stretch" justifyContent="center">
           {/* Video Feed */}
-          <Grid item xs={12} md={6}>
-            <Box
-              sx={{
-                width: '90%',
-                position: 'relative',
-                borderRadius: 2,
-                p: 1,
-                backgroundColor: 'primary.main',
-              }}
-            >
+          <Grid pr={1}>
+            <Box sx={{ position: "relative", width: "100%" }}>
               <Chip
                 label={
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                     <span>{`REC • ${time}`}</span>
                     <Person fontSize="small" />
                     <span>{viewCount}</span>
                   </Box>
                 }
                 sx={{
-                  position: 'absolute',
+                  position: "absolute",
                   top: 16,
                   left: 16,
-                  fontWeight: 'bold',
-                  backgroundColor: '#96d780ff',
-                  color: '#fff',
+                  fontWeight: "bold",
+                  backgroundColor: "primary.borderColor",
                   zIndex: 2,
-                  animation: 'fadeInOut 5s infinite ease-in-out',
-                  '@keyframes fadeInOut': {
-                    '0%': { opacity: 1 },
-                    '50%': { opacity: 0.8 },
-                    '100%': { opacity: 1 },
+                  animation: "fadeInOut 5s infinite ease-in-out",
+                  "@keyframes fadeInOut": {
+                    "0%": { opacity: 1 },
+                    "50%": { opacity: 0.8 },
+                    "100%": { opacity: 1 },
                   },
                 }}
               />
+
               <Box
                 component="img"
-                src="http://192.168.192.107:5000/video_feed"
+                src="http://192.168.192.147:5000/video_feed"
                 alt="Live Camera"
                 sx={{
-                  width: '100%',
-                  height: 'auto',
-                  borderRadius: 2,
+                  border: 4,
+                  borderColor: "primary.main",
+                  borderRadius: 4,
+                  width: "100%",
+                  height: "auto",
+                  display: "block",
                 }}
               />
             </Box>
           </Grid>
-
-          {/* Gauges */}
-          <Grid item xs={12} md={6}>
-            <Stack spacing={2} alignItems="center">
-              {/* CPU Usage */}
-              <Paper
-                sx={{
-                  p: 2,
-                  width: 'clamp(300px, 90%, 500px)',
-                  backgroundColor: 'primary.second',
-                  borderRadius: 3,
-                  transition: 'transform 0.3s ease',
-                  '&:hover': { transform: 'scale(1.03)' },
-                }}
+          {/* Quick Notes */}
+          <Grid>
+            <Paper
+              elevation={3}
+              sx={{
+                border: 5,
+                borderColor: "primary.main",
+                backgroundColor: "primary.borderColor",
+                p: { xs: 2, sm: 3 },
+                pl: {xs: 5},
+                "&:hover": { transform: "scale(1.02)" },
+                transition: "transform 0.2s",
+                minHeight: 300,
+                minWidth: 700,
+              }}
+            >
+              <Stack direction='row' alignItems='center' justifyContent='space-between' p={2}>
+                <Typography
+                align="center"
+                variant="h5"
+                sx={{fontFamily: "inherit" }}
               >
-                <Typography variant="h6" fontFamily="monospace" color="inherit">
-                  CPU % Utilization
-                </Typography>
-                <Divider flexItem sx={{ my: 1 }} />
-                <Gauge
-                  value={cpuData}
-                  startAngle={0}
-                  endAngle={360}
-                  innerRadius="60%"
-                  outerRadius="90%"
-                  sx={{
-                    [`& .${gaugeClasses.valueText}`]: { fontSize: 30 },
-                    [`& .${gaugeClasses.valueArc}`]: { fill: '#022dabff' },
-                    [`& .${gaugeClasses.track}`]: { fill: '#d3d3d3' },
-                  }}
-                />
-              </Paper>
+                Quick Notes
+              </Typography>
+              <Button
+                onClick={() => setOpenInfo(true)}
+                startIcon={<Speed />}
+              />
 
-              {/* CPU Temp */}
-              <Paper
-                sx={{
-                  p: 2,
-                  width: 'clamp(300px, 90%, 500px)',
-                  backgroundColor: 'primary.second',
-                  borderRadius: 3,
-                  transition: 'transform 0.3s ease',
-                  '&:hover': { transform: 'scale(1.03)' },
-                }}
-              >
-                <Typography variant="h6" fontFamily="monospace" color="inherit">
-                  CPU Temp °C
-                </Typography>
-                <Divider flexItem sx={{ my: 1 }} />
-                <Gauge
-                  value={temp}
-                  startAngle={0}
-                  endAngle={360}
-                  innerRadius="60%"
-                  outerRadius="80%"
-                  sx={{
-                    [`& .${gaugeClasses.valueText}`]: { fontSize: 30 },
-                    [`& .${gaugeClasses.valueArc}`]: { fill: '#022dabff' },
-                    [`& .${gaugeClasses.track}`]: { fill: '#d3d3d3' },
-                  }}
+              </Stack>
+              
+              <Divider sx={{ width: "100%", my: 2 }} />
+              <Stack spacing={2}>
+                <TextField
+                  label="Add a quick note"
+                  value={newQuickNote}
+                  onChange={(e) => setNewQuickNote(e.target.value)}
+                  fullWidth
                 />
-              </Paper>
-            </Stack>
+                <Button
+                  variant="outlined"
+                  onClick={addQuickNote}
+                  startIcon={<AddBox />}
+                >
+                  Add Note
+                </Button>
+              </Stack>
+              <Box sx = {{maxHeight: 200, overflowY: "auto"}}>
+              <List>
+                  {quickNotes.map((note) => (
+                    <ListItem key={note.id}>
+                      <ListItemText
+                        primary={note.text}
+                        secondary={note.date.toLocaleTimeString()}
+                      />
+                      <ListItemSecondaryAction>
+                        <IconButton
+                          onClick={() =>
+                            setQuickNotes(
+                              quickNotes.filter((n) => n.id !== note.id)
+                            )
+                          }
+                        >
+                          <Delete />
+                        </IconButton>
+                      </ListItemSecondaryAction>
+                    </ListItem>
+                  ))}
+                </List>
+              </Box>
+        
+            </Paper>
           </Grid>
 
           <Grid item xs={12}>
-            <Paper sx={{ p: 3, backgroundColor: 'primary.main', borderRadius: 2 }}>
+            <Paper sx={{ p: 3, border: 5, borderColor: "primary.main",backgroundColor: 'primary.borderColor', borderRadius: 2 }}>
               <Typography variant="h4" fontFamily="monospace" gutterBottom>
                 Our Mission
               </Typography>
@@ -239,6 +281,87 @@ function App() {
           </Grid>
         </Grid>
       </Container>
+
+      {/* Modal */}
+      <Modal open={openInfo} onClose={() => setOpenInfo(false)}>
+        <Box
+          sx={{
+            position: "absolute",
+            top: "50%", 
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            bgcolor: "background.paper",
+            p: 4,
+            borderRadius: 4,
+            width: 300,
+          }}
+        >
+          {/* Gauges */}
+          <Grid>
+            <Stack spacing={2} alignItems="center" direction="row">
+              {/* CPU Usage */}
+              <Paper
+                sx={{
+                  p: 2,
+                  width: 'clamp(100px, 60%, 300px)',
+                  backgroundColor: 'primary.second',
+                  borderRadius: 3,
+                  transition: 'transform 0.3s ease',
+                  '&:hover': { transform: 'scale(1.03)' },
+                }}
+              >
+                <Typography variant="h6" fontFamily="monospace" color="inherit">
+                  CPU % Utilization
+                </Typography>
+                <Divider flexItem sx={{ my: 1 }} />
+                <Gauge
+                  value={cpuData}
+                  startAngle={0}
+                  endAngle={360}
+                  innerRadius="70%"
+                  outerRadius="90%"
+                  sx={{
+                    [`& .${gaugeClasses.valueText}`]: { fontSize: 30 },
+                    [`& .${gaugeClasses.valueArc}`]: { fill: '#022dabff' },
+                    [`& .${gaugeClasses.track}`]: { fill: '#d3d3d3' },
+                  }}
+                />
+              </Paper>
+
+              {/* CPU Temp */}
+              <Paper
+                sx={{
+                  p: 2,
+                  width: 'clamp(100px, 40%, 300px)',
+                  backgroundColor: 'primary.second',
+                  borderRadius: 3,
+                  transition: 'transform 0.3s ease',
+                  '&:hover': { transform: 'scale(1.03)' },
+                }}
+              >
+                <Typography variant="h6" fontFamily="monospace" color="inherit">
+                  CPU Temp °C
+                </Typography>
+                <Divider flexItem sx={{ my: 1 }} />
+                <Gauge
+                  value={temp}
+                  startAngle={0}
+                  endAngle={360}
+                  innerRadius="90%"
+                  outerRadius="75%"
+                  sx={{
+                    [`& .${gaugeClasses.valueText}`]: { fontSize: 30 },
+                    [`& .${gaugeClasses.valueArc}`]: { fill: '#022dabff' },
+                    [`& .${gaugeClasses.track}`]: { fill: '#d3d3d3' },
+                  }}
+                />
+              </Paper>
+            </Stack>
+          </Grid>
+          
+            
+        </Box>
+      </Modal>
     </ThemeProvider>
   );
 }
