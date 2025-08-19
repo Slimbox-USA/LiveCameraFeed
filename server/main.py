@@ -1,39 +1,20 @@
-from flask import Flask, Response, jsonify,request
+from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
-import socket
 import cv2
 import time
 import psutil
 import subprocess
 import threading
-# import RPi.GPIO as GPIO
-
-# GPIO.setmode(GPIO.BCM)
-# GPIO.setwarnings(False)
-
-# FAN_PIN = 14
-# GPIO.setup(FAN_PIN, GPIO.OUT)
-# GPIO.output(FAN_PIN, GPIO.HIGH)  # Turn pin ON (3.3V)
-
-# onTemp = 50
-connected_ips = set()
-
-
 
 lock = threading.Lock()
 latest_frame = None
-
-# Global flags
 drop_flag = False
 automatic_start = True
 automatic_stop = False
 
-
 app = Flask(__name__)
 CORS(app)
 
-
-# 🔍 Automatically find the first working camera
 def find_camera_index(max_index=10):
     for i in range(max_index):
         cap = cv2.VideoCapture(i)
@@ -47,9 +28,8 @@ def find_camera_index(max_index=10):
 
 camera_index = find_camera_index()
 camera = cv2.VideoCapture(camera_index)
-time.sleep(2)  # Wait for camera to warm up
+time.sleep(2)
 
-# Background thread to update latest frame continuously
 def update_camera():
     global latest_frame
     while True:
@@ -61,13 +41,11 @@ def update_camera():
             continue
         with lock:
             latest_frame = buffer.tobytes()
-        time.sleep(0.03)  # ~30 FPS
+        time.sleep(0.03)
 
-# Start camera update thread once
 camera_thread = threading.Thread(target=update_camera, daemon=True)
 camera_thread.start()
 
-# Generator yields latest shared frame to clients
 def generate_frames():
     while True:
         with lock:
@@ -79,7 +57,6 @@ def generate_frames():
                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
         time.sleep(0.03)
 
-# Reset flags after delay
 def reset_status():
     time.sleep(3)
     with lock:
@@ -93,40 +70,16 @@ connected_ips = {}
 
 def get_views():
     client_ip = request.remote_addr
-    connected_ips[client_ip] = time.time()  # Track the last access time
-
-    # Remove IPs inactive for more than 10 seconds
+    connected_ips[client_ip] = time.time()
     cutoff = time.time() - 10
     inactive_ips = [ip for ip, last_seen in connected_ips.items() if last_seen < cutoff]
     for ip in inactive_ips:
         del connected_ips[ip]
-
     return len(connected_ips)
 
-
-
-# 📡 Video feed route
 @app.route('/video_feed')
 def video_feed():
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
-# # Send drop command to ESP -- Can change for PLC.
-# def send_drop(drop_flag):
-#     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-#         s.connect((esp_IP, esp_port))
-#         s.sendall(b'drop\n' if drop_flag else b'0')
-
-# # Send stop automatic command to ESP
-# def stop_automatic(automatic_stop):
-#     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-#         s.connect((esp_IP, esp_port))
-#         s.sendall(b'stop\n' if automatic_stop else b'3')
-
-# # Send start automatic command to ESP
-# def start_automatic(automatic_start):
-#     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-#         s.connect((esp_IP, esp_port))
-#         s.sendall(b'auto\n' if automatic_start else b'3')
 
 def get_cpu_temp():
     output = subprocess.check_output(['vcgencmd', 'measure_temp']).decode()
@@ -145,42 +98,8 @@ def gather_data():
 def gather_views():
     view = get_views()
     return jsonify({
-        "viewCount" : view
+        "viewCount": view
     })
 
-# # Drop table endpoint
-# @app.route('/dropTable', methods=['POST'])
-# def drop_table():
-#     global drop_flag
-#     with lock:
-#         drop_flag = True
-#         send_drop(drop_flag)
-#         print("Button Pressed: Dropping Table")
-#     threading.Thread(target=reset_status).start()
-#     return jsonify({"drop": True})
-
-# Stop automatic endpoint
-# @app.route('/stopAutomatic', methods=['POST'])
-# def stop_automatic_route():
-#     global automatic_stop
-#     with lock:
-#         automatic_stop = True
-#         stop_automatic(automatic_stop)
-#         print("Button pressed: stopAutomatic set to True")
-#     threading.Thread(target=reset_status).start()
-#     return jsonify({"stop": True})
-
-# # Start automatic endpoint
-# @app.route('/startAutomatic', methods=['POST'])
-# def start_automatic_route():
-#     global automatic_start
-#     with lock:
-#         automatic_start = True
-#         start_automatic(automatic_start)
-#         print("Button pressed: startAutomatic set to True")
-#     threading.Thread(target=reset_status).start()
-#     return jsonify({"message": "Button pressed", "status": True})
-
-# 🚀 Start the Flask server
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, threaded=True)
